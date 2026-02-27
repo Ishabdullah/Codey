@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+CODEY_DIR="$HOME/codey"
+TMPSCRIPT="$(mktemp /data/data/com.termux/files/usr/tmp/codey_run_XXXX.py)"
+
+cat > "$TMPSCRIPT" << PYEOF
+import sys
+sys.path.insert(0, '$CODEY_DIR')
+from main import main
+main()
+PYEOF
+
+python3 "$TMPSCRIPT" "$@"
+rm -f "$TMPSCRIPT"
