@@ -1,28 +1,174 @@
-# Codey v0.1.0
-Local AI coding assistant for Termux using Qwen2.5-Coder-7B.
+# Codey
+
+A local AI coding assistant for Termux. Runs entirely on your phone — no internet, no API keys, no cloud.
+
+Codey uses **Qwen2.5-Coder-7B-Instruct** via **llama.cpp** to write files, run shell commands, fix errors automatically, and remember your project across sessions.
+
+---
 
 ## Requirements
-- llama.cpp built at ~/llama.cpp/build/bin/
-- Model at ~/models/qwen2.5-coder-7b/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf
-- pip install rich
 
-## Usage
-    codey "task"              # one-shot
-    codey --yolo "task"       # no confirmations
-    codey                     # interactive chat
-    codey --chat "task"       # chat with prefilled prompt
+- Android phone with Termux
+- ~5GB free RAM
+- llama.cpp built at `~/llama.cpp/build/bin/`
+- Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf at `~/models/qwen2.5-coder-7b/`
+- Python 3.12 + `rich` (`pip install rich`)
 
-## Chat commands
-    /exit    quit
-    /clear   clear history
-    /cwd     show/change directory
-    /help    show help
+---
 
-## Environment variables
-    CODEY_MODEL    path to GGUF model
-    CODEY_THREADS  CPU threads (default 4)
-    LLAMA_BIN      path to llama-server binary
+## Installation
 
-## Files created in current working directory
-All files Codey creates go in whatever directory you run codey from.
-Use /cwd to change it mid-session.
+```bash
+git clone <repo> ~/codey
+cd ~/codey
+pip install rich
+chmod +x codey
+echo 'export PATH="$HOME/codey:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+Usage
+# One-shot task
+codey "create a Flask hello world app and run it"
+
+# Interactive chat
+codey
+
+# Skip confirmations
+codey --yolo "create fizzbuzz.py and run it"
+
+# Pre-load a file into context
+codey --read main.py "add argument parsing to this"
+
+# Generate project memory file
+codey --init
+
+# Show version
+codey --version
+How It Works
+Codey uses a ReAct agent loop:
+Your task is sent to the model with a system prompt defining available tools
+The model outputs a <tool> JSON call
+Codey executes the tool (write file, run shell command, etc.)
+The result is fed back to the model
+Loop continues until the model gives a plain text final answer
+The model runs via llama-server on port 8081, started automatically on first query and kept alive for the session.
+Chat Commands
+Command
+Description
+/read <file>
+Load a file into context
+/load <file|*.py|dir/>
+Load file, glob pattern, or directory
+/unread <file>
+Remove file from context
+/context
+Show loaded files and sizes
+/diff [file]
+Show what Codey changed (colored diff)
+/undo [file]
+Restore file to previous version
+/init
+Analyze project and generate CODEY.md
+/memory
+Show current CODEY.md contents
+/project
+Show detected project type and files
+/cwd [path]
+Show or change working directory
+/clear
+Clear history, context, and undo history
+/help
+Show all commands
+/exit
+Quit
+Tools
+The model can call these tools:
+Tool
+Description
+write_file
+Create or overwrite a file
+read_file
+Read a file's contents
+append_file
+Append to a file
+list_dir
+List directory contents
+shell
+Run a shell command
+search_files
+Find files by pattern
+Shell commands and file writes prompt for confirmation by default. Use --yolo to skip all prompts.
+Auto Features
+Error retry — if a shell command fails with a Python error, Codey automatically attempts to fix the file and re-run, up to 2 times
+File context — mention a filename in your prompt and Codey auto-loads it
+Project detection — detects Python, Node, Rust, Go, C/C++, web projects from cwd
+CODEY.md — persistent project memory file, auto-loaded on every session
+History summarization — long conversations are compressed automatically to stay within the context window
+Undo history — every file Codey writes is snapshotted so you can always /undo
+CODEY.md
+Run /init or codey --init in any project directory to generate a CODEY.md file. Codey auto-loads this on startup so it always knows your project's stack, structure, and conventions without you having to explain it every session.
+cd ~/myproject
+codey --init
+Edit the generated file freely — it's just markdown injected into the system prompt.
+Configuration
+All settings are in utils/config.py:
+MODEL_CONFIG = {
+    "n_ctx":      2048,    # context window (reduce to 1024 if phone crashes)
+    "n_threads":  6,       # CPU threads
+    "batch_size": 256,     # batch size
+    "kv_type":    "q8_0",  # KV cache quantization
+    "max_tokens": 512,     # max tokens per response
+    "temperature": 0.2,    # lower = more deterministic
+}
+Environment variable overrides:
+export CODEY_MODEL="$HOME/models/my-model.gguf"
+export CODEY_THREADS=4
+RAM Usage
+Component
+Size
+Model weights (Q4_K_M)
+~3.9 GB
+KV cache (Q8_0, 2048 ctx)
+~56 MB
+Compute buffers
+~200 MB
+llama-server + Python
+~180 MB
+Total
+~4.35 GB
+If your phone crashes during inference, reduce n_ctx to 1024 in utils/config.py.
+Project Structure
+codey/
+├── main.py               # CLI entrypoint, REPL loop, command handling
+├── codey                 # Shell wrapper (add to PATH)
+├── CODEY.md              # Project memory (auto-generated by /init)
+├── core/
+│   ├── agent.py          # ReAct tool loop
+│   ├── inference.py      # llama-server HTTP client
+│   ├── loader.py         # Binary and model validation
+│   ├── context.py        # File context injection
+│   ├── project.py        # Project type detection
+│   ├── codeymd.py        # CODEY.md read/write/generate
+│   ├── filehistory.py    # Undo/diff snapshots
+│   └── summarizer.py     # Conversation compression
+├── prompts/
+│   └── system_prompt.py  # System prompt and tool format
+├── tools/
+│   ├── file_tools.py     # File operations with confirmation
+│   └── shell_tools.py    # Shell execution with safety checks
+└── utils/
+    ├── config.py          # All settings
+    ├── logger.py          # Rich terminal output
+    └── file_utils.py      # Low-level file helpers
+Version History
+Version
+Features
+v0.1.0
+ReAct agent loop, file tools, shell tools, llama-server backend, one-shot and interactive modes
+v0.2.0
+/read file context, auto-detect filenames in prompts, auto error retry
+v0.3.0
+CODEY.md project memory, /init command, conversation summarization, project type detection
+v0.4.0
+/diff, /undo, /load with glob and directory support, multi-file context
+License
+MIT

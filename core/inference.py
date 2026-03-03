@@ -23,7 +23,7 @@ def _get_env():
     env["LD_LIBRARY_PATH"] = f"{LLAMA_LIB}:{ld}" if ld else LLAMA_LIB
     return env
 
-def _server_ready(retries=60, delay=1.0) -> bool:
+def _server_ready(retries=90, delay=1.0) -> bool:
     for _ in range(retries):
         try:
             with urllib.request.urlopen(HEALTH_URL, timeout=2) as r:
@@ -38,22 +38,28 @@ def _start_server():
     global _server_proc
     if _server_proc and _server_proc.poll() is None:
         return
+
     cfg = MODEL_CONFIG
     cmd = [
         LLAMA_SERVER_BIN,
-        "--model",   str(MODEL_PATH),
-        "-c",        str(cfg["n_ctx"]),
-        "--threads", str(cfg["n_threads"]),
-        "--port",    "8081",
+        "--model",        str(MODEL_PATH),
+        "--ctx-size",     str(cfg["n_ctx"]),
+        "--threads",      str(cfg["n_threads"]),
+        "--batch-size",   str(cfg["batch_size"]),
+        "--cache-type-k", cfg["kv_type"],
+        "--cache-type-v", cfg["kv_type"],
+        "--port",         "8081",
         "--log-disable",
     ]
-    info("Starting llama-server (first run loads model, ~15s)...")
+
+    info(f"Starting llama-server (ctx={cfg['n_ctx']}, threads={cfg['n_threads']}, batch={cfg['batch_size']}, kv={cfg['kv_type']})...")
     _server_proc = subprocess.Popen(
         cmd,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         env=_get_env(),
     )
+
     if not _server_ready():
         error("llama-server failed to start.")
         _server_proc.kill()
@@ -70,13 +76,9 @@ def infer(messages: list[dict], stream: bool = True, extra_stop: list = None) ->
     _start_server()
     cfg = MODEL_CONFIG
 
-    # Stop on </tool> plus any rogue tag variants the model might use
-    stop_tokens = list(cfg["stop"]) + [
-        "</tool>", "</write_file>", "</shell>",
-        "</read_file>", "</append_file>",
-    ]
+    stop_tokens = list(cfg["stop"]) + ["</tool>", "</write_file>", "</shell>"]
     if extra_stop:
-        stop_tokens += extra_stop
+        stop_tokens += [s for s in extra_stop if s not in stop_tokens]
 
     payload = json.dumps({
         "model":          "codey",

@@ -3,6 +3,8 @@ import re
 from core.inference import infer
 from core.context import build_file_context_block, auto_load_from_prompt, list_loaded
 from core.project import get_project_summary
+from core.codeymd import read_codeymd, find_codeymd
+from core.summarizer import should_summarize, summarize_history
 from prompts.system_prompt import SYSTEM_PROMPT
 from tools.file_tools import tool_read_file, tool_write_file, tool_append_file, tool_list_dir
 from tools.shell_tools import shell, search_files
@@ -25,9 +27,10 @@ ROGUE_TAG_MAP = {
 }
 
 HALLUCINATION_MARKERS = [
-    "\nuser\n", "\nUser\n", "\nUSER\n",
-    "\nassistant\n", "\nAssistant\n",
-    "Tool result:", "Next action or final answer:",
+    "\nuser\n", "\nUSER\n", "\nUser\n",
+    "\nassistant\n", "\nASSISTANT\n", "\nAssistant\n",
+    "user\n#", "assistant\n",
+    "## Loaded Files", "## Project Memory", "## Current Project",
     "<|im_start|>", "<|im_end|>",
 ]
 
@@ -36,6 +39,16 @@ def clean_response(text: str) -> str:
         idx = text.find(marker)
         if idx != -1:
             text = text[:idx]
+    # Strip system prompt leakage — if response starts with tool list, find real answer
+    leak_markers = ["AVAILABLE TOOLS:", "TOOL CALL FORMAT", "You are Codey"]
+    for marker in leak_markers:
+        if text.startswith(marker):
+            # Find where the actual answer starts (after the rules block)
+            for split in ["The agent", "Based on", "I have", "Here", "Codey has"]:
+                idx = text.find("\n" + split)
+                if idx != -1:
+                    text = text[idx:].strip()
+                    break
     return text.strip()
 
 def extract_json(raw: str) -> dict | None:
@@ -51,48 +64,31 @@ def extract_json(raw: str) -> dict | None:
     if end == 0:
         return None
     candidate = raw[:end]
-
-    try:
-        return json.loads(candidate)
-    except Exception:
-        pass
-
-    fixed = re.sub(r",\s*([}\]])", r"\1", candidate)
-    try:
-        return json.loads(fixed)
-    except Exception:
-        pass
-
-    def replace_single_quoted_values(s):
-        return re.sub(
+    for attempt in [
+        lambda s: json.loads(s),
+        lambda s: json.loads(re.sub(r",\s*([}\]])", r"\1", s)),
+        lambda s: json.loads(re.sub(
             r'("(?:content|command|path|pattern)"\s*:\s*)\'((?:[^\'\\]|\\.)*)\'',
             lambda m: m.group(1) + json.dumps(m.group(2)),
-            s
-        )
-
-    fixed2 = replace_single_quoted_values(fixed)
-    try:
-        return json.loads(fixed2)
-    except Exception:
-        pass
-
-    # Manual extraction fallback
+            re.sub(r",\s*([}\]])", r"\1", s)
+        )),
+    ]:
+        try:
+            return attempt(candidate)
+        except Exception:
+            pass
     result = {}
     for key in ["name", "path", "content", "command", "pattern"]:
         m = re.search(rf'"{key}"\s*:\s*"((?:[^"\\]|\\.)*)"', candidate)
         if m:
-            try:
-                result[key] = bytes(m.group(1), "utf-8").decode("unicode_escape")
-            except Exception:
-                result[key] = m.group(1)
+            result[key] = m.group(1)
             continue
         m = re.search(rf'"{key}"\s*:\s*\'((?:[^\'\\]|\\.*)*)\'', candidate)
         if m:
             result[key] = m.group(1)
-
     if result:
-        if "name" in result:
-            name = result.pop("name")
+        name = result.pop("name", None)
+        if name:
             return {"name": name, "args": result}
         return result
     return None
@@ -143,13 +139,20 @@ def is_error(result: str, tool_name: str) -> bool:
 def build_system_prompt() -> str:
     parts = [SYSTEM_PROMPT]
 
-    proj = get_project_summary()
-    if proj:
-        parts.append(f"\nProject context:\n{proj}")
+    # CODEY.md — if present, use it instead of live scan (saves tokens)
+    codeymd = read_codeymd()
+    if codeymd:
+        parts.append(f"\n## Project Memory\n{codeymd}")
+    else:
+        # No CODEY.md — fall back to live project scan
+        proj = get_project_summary()
+        if proj:
+            parts.append(f"\n## Current Project\n{proj}")
 
+    # Loaded files (only if explicitly loaded)
     file_ctx = build_file_context_block()
     if file_ctx:
-        parts.append(f"\nLoaded files:\n{file_ctx}")
+        parts.append(f"\n## Loaded Files\n{file_ctx}")
 
     return "\n".join(parts)
 
@@ -170,6 +173,9 @@ def enrich_message(user_message: str) -> str:
 def run_agent(user_message: str, history: list, yolo: bool = False):
     auto_load_from_prompt(user_message)
     enriched = enrich_message(user_message)
+
+    if should_summarize(history):
+        history = summarize_history(history)
 
     messages = [{"role": "system", "content": build_system_prompt()}]
     keep = AGENT_CONFIG["history_turns"] * 2
