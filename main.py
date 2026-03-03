@@ -34,6 +34,7 @@ def parse_args():
     parser.add_argument("--fix",        metavar="FILE", help="Run file, auto-fix errors")
     parser.add_argument("--no-resume",  action="store_true", help="Don't load saved session")
     parser.add_argument("--clear-session", action="store_true", help="Clear saved session")
+    parser.add_argument("--plan", action="store_true", help="Enable plan mode for complex tasks")
     return parser.parse_args()
 
 def apply_overrides(args):
@@ -156,9 +157,18 @@ def handle_command(user_input: str, history: list, yolo: bool = False) -> tuple[
             info("       /search def run_agent")
             info("       /search import core/")
         else:
-            query_parts = parts[1].split(maxsplit=1)
-            pattern = query_parts[0]
-            search_path = query_parts[1] if len(query_parts) > 1 else "."
+            query_parts = parts[1].rsplit(maxsplit=1)
+            # Only treat last arg as path if it looks like a path (starts with . / ~ or is a dir)
+            import os
+            if len(query_parts) > 1 and (
+                query_parts[-1].startswith((".", "/", "~")) or
+                os.path.isdir(query_parts[-1])
+            ):
+                pattern = query_parts[0]
+                search_path = query_parts[1]
+            else:
+                pattern = parts[1]  # whole thing is the pattern
+                search_path = "."
             result = search_in_project(pattern, search_path)
             console.print(result)
         return True, history
@@ -190,9 +200,6 @@ def handle_command(user_input: str, history: list, yolo: bool = False) -> tuple[
                 info(result)
             else:
                 success(result)
-                if console.input("[dim]Push to remote? [y/N]: [/dim]").strip().lower() in ("y", "yes"):
-                    push_result = git_push()
-                    success(push_result) if not push_result.startswith("[ERROR]") else error(push_result)
         return True, history
 
     if low.startswith("/sessions"):
@@ -327,7 +334,7 @@ def handle_command(user_input: str, history: list, yolo: bool = False) -> tuple[
 
     return False, history
 
-def repl(initial_prompt=None, yolo=False, one_shot=False, preload=None, resume=True):
+def repl(initial_prompt=None, yolo=False, one_shot=False, preload=None, resume=True, plan=False):
     console.print(BANNER)
     separator()
     load_model()
@@ -367,7 +374,7 @@ def repl(initial_prompt=None, yolo=False, one_shot=False, preload=None, resume=T
 
     if initial_prompt:
         try:
-            _, history = run_agent(initial_prompt, history, yolo=yolo)
+            _, history = run_agent(initial_prompt, history, yolo=yolo, use_plan=plan)
             save_session(history)
         except KeyboardInterrupt:
             console.print("\n[dim]Interrupted.[/dim]")
@@ -391,7 +398,7 @@ def repl(initial_prompt=None, yolo=False, one_shot=False, preload=None, resume=T
             continue
 
         try:
-            _, history = run_agent(user_input, history, yolo=yolo)
+            _, history = run_agent(user_input, history, yolo=yolo, use_plan=plan)
             save_session(history)
         except KeyboardInterrupt:
             console.print("\n[dim]Interrupted.[/dim]")
@@ -438,6 +445,7 @@ def main():
         one_shot=one_shot,
         preload=args.read,
         resume=not args.no_resume,
+        plan=args.plan,
     )
 
 if __name__ == "__main__":

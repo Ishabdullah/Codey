@@ -21,7 +21,7 @@ def _session_path(project_dir: str = None) -> Path:
     name = Path(cwd).name
     return SESSIONS_DIR / f"{name}_{key}.json"
 
-def save_session(history: list, project_dir: str = None, max_turns: int = 20):
+def save_session(history: list, project_dir: str = None, max_turns: int = 6):
     """Save conversation history to disk. Keeps last max_turns turns."""
     if not history:
         return

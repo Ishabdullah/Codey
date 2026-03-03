@@ -18,10 +18,11 @@ def read_codeymd(start: str = None) -> str:
         return ""
     try:
         content = path.read_text(encoding="utf-8", errors="replace").strip()
-        # Sanity check — if it looks like a prompt was echoed back, ignore it
         if "Write a concise CODEY.md" in content or "Analyze this project" in content:
             return ""
-        success(f"Loaded CODEY.md from {path}")
+        if str(path) not in _codeymd_cache:
+            success(f"Loaded CODEY.md from {path}")
+            _codeymd_cache[str(path)] = True
         return content
     except Exception:
         return ""
