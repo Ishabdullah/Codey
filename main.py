@@ -32,6 +32,8 @@ def parse_args():
     parser.add_argument("--read",       nargs="+", metavar="FILE")
     parser.add_argument("--init",       action="store_true", help="Generate CODEY.md")
     parser.add_argument("--fix",        metavar="FILE", help="Run file, auto-fix errors")
+    parser.add_argument("--tdd",        metavar="FILE", help="TDD mode: source.py test_source.py")
+    parser.add_argument("--tests",      metavar="FILE", help="Test file for --tdd mode")
     parser.add_argument("--no-resume",  action="store_true", help="Don't load saved session")
     parser.add_argument("--clear-session", action="store_true", help="Clear saved session")
     parser.add_argument("--plan", action="store_true", help="Enable plan mode for complex tasks")
@@ -441,6 +443,21 @@ def main():
     if args.init:
         load_model()
         run_init()
+        shutdown()
+        return
+
+    if args.tdd:
+        load_model()
+        from core.tdd import run_tdd_loop, find_test_file
+        test_file = args.tests or find_test_file(args.tdd)
+        if not test_file:
+            # Suggest test file name
+            from pathlib import Path as _P
+            suggested = "test_" + _P(args.tdd).name
+            error(f"No test file found. Create {suggested} or use: codey --tdd {args.tdd} --tests {suggested}")
+            shutdown()
+            return
+        run_tdd_loop(args.tdd, test_file, yolo=args.yolo)
         shutdown()
         return
 

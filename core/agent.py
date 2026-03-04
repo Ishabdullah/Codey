@@ -12,6 +12,7 @@ from tools.patch_tools import tool_patch_file
 from tools.shell_tools import shell, search_files
 from utils.logger import tool_call, tool_result, warning, separator, info
 from utils.config import AGENT_CONFIG
+from core.display import show_file_write, show_patch, show_shell, show_tool_generic, show_thinking, show_response
 
 TOOLS = {
     "read_file":    lambda args: tool_read_file(args["path"]),
@@ -100,12 +101,28 @@ def parse_tool_call(text):
 def execute_tool(tool_dict):
     name = tool_dict.get("name", "")
     args = tool_dict.get("args", {})
-    tool_call(name, args)
     if name not in TOOLS:
         return "[ERROR] Unknown tool: " + name
     try:
+        # Get old content before write for diff display
+        old_content = None
+        if name == "write_file":
+            from pathlib import Path as _P
+            p = _P(args.get("path", ""))
+            if p.exists():
+                try: old_content = p.read_text()
+                except: pass
         result = TOOLS[name](args)
-        tool_result(result)
+        # Display using Claude Code style panels
+        if name == "write_file":
+            show_file_write(args.get("path",""), args.get("content",""), old_content)
+        elif name == "patch_file":
+            show_patch(args.get("path",""), args.get("old_str",""), args.get("new_str",""))
+        elif name == "shell":
+            is_err = is_error(result, "shell")
+            show_shell(args.get("command",""), result, error=is_err)
+        elif name != "read_file":
+            show_tool_generic(name, args, result)
         return result
     except Exception as e:
         return "[ERROR] " + str(e)
@@ -210,7 +227,8 @@ def run_agent(user_message, history, yolo=False, use_plan=False):
             warning("Context: " + usage_bar(used, total))
         else:
             info("Context: " + usage_bar(used, total))
-        response = infer(messages, stream=True, extra_stop=["</tool>"])
+        with show_thinking():
+            response = infer(messages, stream=False, extra_stop=["</tool>"])
         response = clean_response(response)
         tool_dict = parse_tool_call(response)
         if tool_dict:
