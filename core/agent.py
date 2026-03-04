@@ -140,7 +140,7 @@ def is_hallucination(response, user_message, tools_used):
     ])
     return false_file, false_run
 
-def build_system_prompt():
+def build_system_prompt(message=""):
     parts = [SYSTEM_PROMPT]
     codeymd = read_codeymd()
     if codeymd:
@@ -149,7 +149,8 @@ def build_system_prompt():
         proj = get_project_summary()
         if proj:
             parts.append("\n## Current Project\n" + proj)
-    file_ctx = build_file_context_block()
+    # Memory-aware: only inject files relevant to current message
+    file_ctx = build_file_context_block(message)
     if file_ctx:
         parts.append("\n## Loaded Files\n" + file_ctx)
     return "\n".join(parts)
@@ -182,7 +183,13 @@ def run_agent(user_message, history, yolo=False, use_plan=False):
             return "[Cancelled]", history
     if should_summarize(history):
         history = summarize_history(history)
-    sys_prompt = build_system_prompt()
+    # Tick memory manager — evicts stale files, advances turn counter
+    from core.memory import memory as _mem
+    _mem.tick()
+    # Compress history if it's grown too long
+    if len(history) >= 8:
+        history = _mem.compress_summary(history)
+    sys_prompt = build_system_prompt(user_message)
     messages = [{"role": "system", "content": sys_prompt}]
     keep = AGENT_CONFIG["history_turns"] * 2
     messages.extend(history[-keep:] if len(history) > keep else history)
@@ -227,7 +234,10 @@ def run_agent(user_message, history, yolo=False, use_plan=False):
             last_tool_result = execute_tool(tool_dict)
             if name in ("write_file", "patch_file"):
                 from core.context import load_file
-                load_file(args.get("path", ""))
+                from core.memory import memory as _mem
+                fpath = args.get("path", "")
+                load_file(fpath)
+                _mem.touch_file(fpath)
             if is_error(last_tool_result, name) and auto_retries < max_retries:
                 auto_retries += 1
                 warning("Error detected — auto-retry " + str(auto_retries) + "/" + str(max_retries))

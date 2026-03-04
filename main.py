@@ -244,14 +244,20 @@ def handle_command(user_input: str, history: list, yolo: bool = False) -> tuple[
         return True, history
 
     if low == "/context":
-        loaded = ctx.list_loaded()
+        from core.memory import memory as _mem
+        s = _mem.status()
+        loaded = s['file_names']
         if loaded:
-            console.print("[bold]Loaded files:[/bold]")
-            for f in loaded:
-                size = len(ctx._loaded_files.get(f, ""))
-                console.print(f"  📄 {Path(f).name} ({size} chars)")
+            console.print(f"[bold]Files in memory (turn {s['turn']}):[/bold]")
+            for fname in loaded:
+                files = _mem._files
+                for k, r in files.items():
+                    if r.name == fname:
+                        age = s['turn'] - r.last_used_turn
+                        score_hint = f"last used {age} turns ago"
+                        console.print(f"  📄 {r.name} ({r.tokens} tokens, {score_hint})")
         else:
-            info("No files loaded.")
+            info("No files in memory. Use /load or /read to add files.")
         return True, history
 
     if low == "/project":
@@ -274,6 +280,17 @@ def handle_command(user_input: str, history: list, yolo: bool = False) -> tuple[
             console.print(read_codeymd())
         else:
             info("No CODEY.md found. Run /init to generate one.")
+        return True, history
+
+    if low.startswith("/memory-status"):
+        from core.memory import memory as _mem
+        from core.tokens import estimate_tokens, usage_bar
+        s = _mem.status()
+        console.print(f"[bold]Memory status — turn {s['turn']}:[/bold]")
+        console.print(f"  Files in memory:  {s['files']} — {', '.join(s['file_names']) or 'none'}")
+        console.print(f"  Summary:          {s['summary_tokens']} tokens")
+        if _mem.get_summary():
+            console.print(f"[dim]{_mem.get_summary()}[/dim]")
         return True, history
 
     if low.startswith("/cwd"):

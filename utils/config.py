@@ -8,12 +8,12 @@ MODEL_PATH = Path(os.environ.get(
 ))
 
 MODEL_CONFIG = {
-    "n_ctx":          2048,
+    "n_ctx":          4096,
     "n_threads":      6,
     "n_gpu_layers":   0,
     "verbose":        False,
     "temperature":    0.2,
-    "max_tokens":     512,
+    "max_tokens":     1024,
     "repeat_penalty": 1.1,
     "top_p":          0.95,
     "top_k":          40,
@@ -30,5 +30,5 @@ AGENT_CONFIG = {
     "history_turns":  3,
 }
 
-CODEY_VERSION = "0.6.0"
+CODEY_VERSION = "0.7.0"
 CODEY_NAME    = "Codey"
