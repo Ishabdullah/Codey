@@ -37,6 +37,7 @@ def parse_args():
     parser.add_argument("--session",    nargs="?", const="list", metavar="ID", help="Resume saved session")
     parser.add_argument("--clear-session", action="store_true", help="Clear saved session")
     parser.add_argument("--plan", action="store_true", help="Enable plan mode for complex tasks")
+    parser.add_argument("--no-plan", action="store_true", help="Disable orchestration/planning for complex tasks")
     return parser.parse_args()
 
 def apply_overrides(args):
@@ -309,12 +310,28 @@ def handle_command(user_input: str, history: list, yolo: bool = False) -> tuple[
             info(f"Current directory: {os.getcwd()}")
         return True, history
 
+    if low.startswith("/ignore"):
+        parts = cmd.split(maxsplit=1)
+        if len(parts) < 2:
+            info("Usage: /ignore <pattern>")
+        else:
+            pattern = parts[1].strip()
+            ignore_file = Path(os.getcwd()) / ".codeyignore"
+            try:
+                with open(ignore_file, "a") as f:
+                    f.write(f"\n{pattern}")
+                success(f"Added '{pattern}' to .codeyignore")
+            except Exception as e:
+                error(f"Could not update .codeyignore: {e}")
+        return True, history
+
     if low == "/help":
         console.print("""
 [bold]File commands:[/bold]
   /read <file>           Load file into context
   /load <file|*.py|dir>  Load file, glob, or whole directory
   /unread <file>         Remove file from context
+  /ignore <pattern>      Add pattern to .codeyignore
   /context               Show loaded files and sizes
   /diff [file]           Show what Codey changed (colored diff)
   /undo [file]           Restore file to previous version
@@ -353,7 +370,7 @@ def handle_command(user_input: str, history: list, yolo: bool = False) -> tuple[
 
     return False, history
 
-def repl(initial_prompt=None, yolo=False, one_shot=False, preload=None, plan=False, session_path=None):
+def repl(initial_prompt=None, yolo=False, one_shot=False, preload=None, plan=False, no_plan=False, session_path=None):
     console.print(BANNER)
     separator()
     load_model()
@@ -382,7 +399,7 @@ def repl(initial_prompt=None, yolo=False, one_shot=False, preload=None, plan=Fal
 
     if initial_prompt and one_shot:
         try:
-            _, history = run_agent(initial_prompt, history, yolo=yolo)
+            _, history = run_agent(initial_prompt, history, yolo=yolo, no_plan=no_plan)
             save_session(history)
         except KeyboardInterrupt:
             pass
@@ -395,7 +412,7 @@ def repl(initial_prompt=None, yolo=False, one_shot=False, preload=None, plan=Fal
 
     if initial_prompt:
         try:
-            _, history = run_agent(initial_prompt, history, yolo=yolo, use_plan=plan)
+            _, history = run_agent(initial_prompt, history, yolo=yolo, use_plan=plan, no_plan=no_plan)
             save_session(history)
         except KeyboardInterrupt:
             console.print("\n[dim]Interrupted.[/dim]")
@@ -419,7 +436,7 @@ def repl(initial_prompt=None, yolo=False, one_shot=False, preload=None, plan=Fal
             continue
 
         try:
-            _, history = run_agent(user_input, history, yolo=yolo, use_plan=plan)
+            _, history = run_agent(user_input, history, yolo=yolo, use_plan=plan, no_plan=no_plan)
             save_session(history)
         except KeyboardInterrupt:
             console.print("\n[dim]Interrupted.[/dim]")
@@ -491,6 +508,7 @@ def main():
         preload=args.read,
         session_path=resolved_session,
         plan=args.plan,
+        no_plan=args.no_plan,
     )
 
 if __name__ == "__main__":

@@ -265,7 +265,7 @@ def check_git_and_offer_commit(user_message, tools_used):
         else:
             success(f"Committed: {msg}")
 
-def run_agent(user_message, history, yolo=False, use_plan=False, _in_subtask=False):
+def run_agent(user_message, history, yolo=False, use_plan=False, no_plan=False, _in_subtask=False):
     used, total = get_context_usage([{"role": "system", "content": build_system_prompt()}])
     if used < total * 0.5:
         auto_load_from_prompt(user_message)
@@ -273,7 +273,7 @@ def run_agent(user_message, history, yolo=False, use_plan=False, _in_subtask=Fal
     # Orchestrator — complex tasks get broken into subtask queue
     from core.orchestrator import is_complex, plan_tasks, run_queue
     from core.display import show_task_plan
-    if is_complex(user_message) and not _in_subtask:
+    if is_complex(user_message) and not _in_subtask and not no_plan:
         info("Planning subtasks...")
         queue = plan_tasks(user_message, read_codeymd())
         if len(queue.tasks) > 1:
