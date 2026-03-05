@@ -9,7 +9,7 @@ A local AI coding assistant for Termux, powered by Qwen2.5-Coder-7B running enti
  ██║     ██║   ██║██║  ██║██╔══╝    ╚██╔╝
  ╚██████╗╚██████╔╝██████╔╝███████╗   ██║
   ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝   ╚═╝
-  v0.9.5 · Local AI Coding Assistant · Termux
+  v1.0.0 · Local AI Coding Assistant · Termux
 ```
 
 ---
@@ -379,6 +379,7 @@ After completing a task or running successful tests, Codey will check your git s
 
 | Version | Highlights |
 |---|---|
+| v1.0.0 | Production release — full stability, security hardening, repo map, task orchestrator |
 | v0.9.5 | Strip "Final Answer:" from checklists, refined planner prompts |
 | v0.9.4 | Added `--no-plan` flag and `/ignore` command |
 | v0.9.3 | Repo map, auto-commit after tasks, context-aware `patch_file` instructions |
