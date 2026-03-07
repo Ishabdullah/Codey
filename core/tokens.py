@@ -3,8 +3,16 @@ Token usage tracking — show context window utilization.
 """
 from utils.config import MODEL_CONFIG
 
-def estimate_tokens(text: str) -> int:
-    """Rough estimate: 1 token ≈ 4 chars."""
+def estimate_tokens(text: str, path: str = None) -> int:
+    """
+    Smarter heuristic:
+    - Code files (.py, .js, .ts, .c, .cpp, .rs, .go): 1 token ≈ 3 chars
+    - Prose/Other (.md, .txt, JSON, etc.): 1 token ≈ 4 chars
+    """
+    if path:
+        code_exts = {".py", ".js", ".ts", ".c", ".cpp", ".h", ".rs", ".go"}
+        if any(path.endswith(ext) for ext in code_exts):
+            return len(text) // 3
     return len(text) // 4
 
 def estimate_messages_tokens(messages: list[dict]) -> int:

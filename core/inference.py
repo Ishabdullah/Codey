@@ -77,7 +77,13 @@ def infer(messages: list[dict], stream: bool = True, extra_stop: list = None) ->
     _start_server()
     cfg = MODEL_CONFIG
 
-    stop_tokens = list(cfg["stop"]) + ["</tool>", "</write_file>", "</shell>"]
+    stop_tokens = list(cfg["stop"]) + [
+        "</tool>", "</write_file>", "</shell>",
+        # Prevent model from echoing system prompt sections into its response
+        "\n## Current Project", "\n## Project Map", "\n## Loaded Files",
+        "\n## Project Memory", "\nuser\n", "\nUSER\n", "\nUser\n",
+        "<|im_start|>user", "<|im_start|>system",
+    ]
     if extra_stop:
         stop_tokens += [s for s in extra_stop if s not in stop_tokens]
 

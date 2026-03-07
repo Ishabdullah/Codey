@@ -28,15 +28,14 @@ BUDGET_RESPONSE = CTX_TOTAL - BUDGET_SYSTEM - BUDGET_SUMMARY - BUDGET_FILES - BU
 
 LRU_EVICT_AFTER = 3  # evict file after N turns without reference
 
-def _tokens(text):
-    return max(1, len(text) // 4)
+from core.tokens import estimate_tokens
 
 class FileRecord:
     """Tracks a loaded file with access metadata."""
     def __init__(self, path, content):
         self.path = path
         self.content = content
-        self.tokens = _tokens(content)
+        self.tokens = estimate_tokens(content, path)
         self.last_used_turn = 0
         self.access_count = 1
         self.name = Path(path).name
@@ -79,7 +78,7 @@ class MemoryManager:
         key = str(p.resolve())
         if key in self._files:
             self._files[key].content = content
-            self._files[key].tokens = _tokens(content)
+            self._files[key].tokens = estimate_tokens(content, str(p))
             self._files[key].last_used_turn = self._turn
             self._files[key].access_count += 1
         else:
@@ -118,7 +117,7 @@ class MemoryManager:
         entry = f'[Turn {self._turn}] {task[:80]}: {result[:120]}'
         self._summary = (self._summary + '\n' + entry).strip()
         # Keep summary within token budget
-        while _tokens(self._summary) > BUDGET_SUMMARY:
+        while estimate_tokens(self._summary) > BUDGET_SUMMARY:
             lines = self._summary.splitlines()
             if len(lines) <= 1:
                 break
@@ -173,11 +172,27 @@ class MemoryManager:
             else:
                 # Try to fit a truncated version
                 remaining = budget - used
-                if remaining > 50:
-                    truncated = record.content[:remaining * 4]
-                    tr = FileRecord(record.path, truncated + '\n...[truncated]')
+                marker = '\n...[truncated]'
+                
+                # Use same heuristic as estimate_tokens
+                code_exts = {".py", ".js", ".ts", ".c", ".cpp", ".h", ".rs", ".go"}
+                is_code = any(record.path.endswith(ext) for ext in code_exts)
+                multiplier = 3 if is_code else 4
+                
+                marker_tokens = len(marker) // multiplier
+                if remaining > marker_tokens + 10:
+                    # Calculate max allowed chars for the remaining tokens
+                    # (chars // multiplier) <= remaining
+                    # => chars <= remaining * multiplier + (multiplier - 1)
+                    max_chars = (remaining * multiplier) + (multiplier - 1)
+                    truncate_at = max_chars - len(marker)
+                    
+                    truncated = record.content[:truncate_at]
+                    tr = FileRecord(record.path, truncated + marker)
                     tr.last_used_turn = record.last_used_turn
-                    selected.append(tr)
+                    # Re-verify tokens just in case
+                    if used + tr.tokens <= budget:
+                        selected.append(tr)
                 break
         return selected
 
@@ -206,7 +221,7 @@ class MemoryManager:
         return {
             'files': len(self._files),
             'file_names': [Path(k).name for k in self._files],
-            'summary_tokens': _tokens(self._summary),
+            'summary_tokens': estimate_tokens(self._summary),
             'turn': self._turn,
         }
 

@@ -78,8 +78,12 @@ def get_repo_map(cwd: str = None) -> str:
             
     if not repo_map:
         return ""
-        
-    return "## Project Map\n" + "\n\n".join(repo_map)
+
+    result = "## Project Map\n" + "\n\n".join(repo_map)
+    # Cap at ~1200 chars (~300 tokens) to avoid bloating the system prompt
+    if len(result) > 1200:
+        result = result[:1197] + "..."
+    return result
 
 def detect_project(cwd: str = None) -> dict:
     """

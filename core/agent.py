@@ -12,7 +12,7 @@ from tools.patch_tools import tool_patch_file
 from tools.shell_tools import shell, search_files
 from utils.logger import tool_call, tool_result, warning, separator, info
 from utils.config import AGENT_CONFIG
-from core.display import show_file_write, show_patch, show_shell, show_tool_generic, show_thinking, show_response
+from core.display import show_file_write, show_patch, show_shell, show_tool_generic, show_response
 
 TOOLS = {
     "read_file":    lambda args: tool_read_file(args["path"]),
@@ -189,13 +189,17 @@ def is_error(result, tool_name):
 def is_hallucination(response, user_message, tools_used):
     msg_lower = user_message.lower()
     resp_lower = response.lower()
-    needs_file = any(k in msg_lower for k in ["create", "write", "make", "build"])
+    needs_file = any(k in msg_lower for k in [
+        "create", "write", "make", "build", "implement", "add", "generate",
+    ])
     needs_run  = any(k in msg_lower for k in ["run", "execute", "test"])
     file_done  = any("write_file" in s or "patch_file" in s for s in tools_used)
     shell_done = any("shell" in s for s in tools_used)
     false_file = needs_file and not file_done and any(p in resp_lower for p in [
         "has been created", "was created", "have created",
         "successfully created", "file has been", "has been written", "created the file",
+        "is already implemented", "already implemented", "capability is already",
+        "already exists", "is implemented in",
     ])
     false_run = needs_run and not shell_done and any(p in resp_lower for p in [
         "run successfully", "executed successfully", "created and run", "ran successfully",
@@ -307,6 +311,32 @@ def run_agent(user_message, history, yolo=False, use_plan=False, no_plan=False, 
         history = _mem.compress_summary(history)
     sys_prompt = build_system_prompt(user_message)
     messages = [{"role": "system", "content": sys_prompt}]
+    
+    # Pre-inference guide: if it's a question or conversation, tell it NOT to use tools
+    msg_low = user_message.lower().strip()
+    _action_kws = [
+        "create", "write", "make", "build", "edit", "fix", "run", "execute",
+        "install", "add", "delete", "remove", "update", "patch", "refactor",
+        "implement", "generate", "rewrite", "deploy", "setup", "configure",
+    ]
+    _has_action = any(k in msg_low for k in _action_kws)
+    _question_starters = (
+        "what", "why", "how", "when", "where", "who", "which",
+        "is ", "are ", "do ", "does ", "can ", "could ", "would ",
+        "should ", "will ", "was ", "were ", "has ", "have ",
+    )
+    _qa_phrases = [
+        "tell me", "tell me about", "explain", "help me understand",
+        "what can you", "hello", "hi ", "hey ", "thanks", "thank you",
+    ]
+    is_qa = not _has_action and (
+        msg_low.endswith("?") or
+        msg_low.startswith(_question_starters) or
+        any(k in msg_low for k in _qa_phrases)
+    )
+    if is_qa:
+        messages.append({"role": "user", "content": "IMPORTANT: This is a question or conversation. Respond with plain text only. DO NOT use any tools."})
+
     keep = AGENT_CONFIG["history_turns"] * 2
     messages.extend(history[-keep:] if len(history) > keep else history)
     messages.append({"role": "user", "content": enriched})
@@ -326,13 +356,31 @@ def run_agent(user_message, history, yolo=False, use_plan=False, no_plan=False, 
             warning("Context: " + usage_bar(used, total))
         else:
             info("Context: " + usage_bar(used, total))
-        with show_thinking():
-            response = infer(messages, stream=False, extra_stop=["</tool>"])
+        response = infer(messages, stream=True, extra_stop=["</tool>"])
         response = clean_response(response)
         tool_dict = parse_tool_call(response)
         if tool_dict:
             name = tool_dict.get("name", "")
             args = tool_dict.get("args", {})
+            
+            # SANITY CHECK: prevent hallucinated tool usage
+            if is_qa and name not in ["read_file", "list_dir"]:
+                 warning(f"Model tried to use '{name}' for a general question.")
+                 messages.append({"role": "assistant", "content": response})
+                 messages.append({"role": "user", "content": "Just answer my question directly with text. No tools needed. Final answer format: 'I can help with [tasks].'"})
+                 continue
+            
+            # Specific check for write/patch
+            if name in ["write_file", "patch_file", "append_file"]:
+                path = args.get("path", "")
+                if path and path.lower() not in msg_low:
+                    from pathlib import Path as _P
+                    if not _P(path).exists() and not any(k in msg_low for k in ["create", "write", "new", "make"]):
+                        warning(f"Model tried to create/edit unexpected file: {path}")
+                        messages.append({"role": "assistant", "content": response})
+                        messages.append({"role": "user", "content": f"I didn't ask to modify '{path}'. Please answer my question directly."})
+                        continue
+
             sig = name + ":" + json.dumps(args, sort_keys=True)
             if sig in tools_used:
                 duplicate_count += 1

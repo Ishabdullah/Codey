@@ -1,25 +1,20 @@
-# Codey v0.9.5 Implementation Todo
+# Codey v1.0.1 Implementation Todo
 
-## Bug Fixes & Improvements
+## Packaging & Trust
 
-- [x] 1. Strip "Final Answer:" prefixes in task checklist (core/orchestrator.py)
-    - Strip "Final Answer: ", "Final answer: ", "Done. Final Answer: ", "Final answer:".
-- [x] 2. Test and fix orchestrator planner prompt (core/orchestrator.py)
-    - Reproduce complex task and verify steps.
-    - Tighten `PLAN_PROMPT` if "Open in editor" style steps appear.
-
-## Documentation
-
-- [x] 3. Update README.md
-    - .codeyignore
-    - Workspace restriction
-    - Repo map
-    - Auto-commit
-    - --no-plan flag
-    - /ignore command
-    - Version history (v0.9.1 - v0.9.4)
+- [ ] 1. Create `requirements.txt` (Scan imports and pin versions)
+- [ ] 2. Create `tests/` suite:
+    - [ ] `test_agent_parsing.py`
+    - [ ] `test_patch.py`
+    - [ ] `test_memory.py`
+    - [ ] `test_codeyignore.py`
+- [ ] 3. Token estimation improvement (core/tokens.py or similar)
+    - [ ] Code heuristic (len/3) vs Prose (len/4)
+- [ ] 4. Expand secret redaction patterns (core/sessions.py)
+    - [ ] JWTs, AWS keys, Bearer tokens, SSH private keys
 
 ## Release
 
-- [x] 4. Bump version to 0.9.5 (utils/config.py)
-- [x] 5. Push to GitHub
+- [ ] 5. Bump version to 1.0.1 (utils/config.py)
+- [ ] 6. Update Version History in README.md
+- [ ] 7. Push to GitHub

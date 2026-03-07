@@ -21,11 +21,37 @@ COMPLEX_SIGNALS = [
 def is_complex(message):
     """Heuristic: does this need multiple steps?"""
     msg = message.lower()
-    if len(message) < 100:
+    
+    # Negative signals: questions/conversations should NOT trigger orchestration
+    _action_kws = [
+        "create", "write", "make", "build", "edit", "fix", "run", "execute",
+        "install", "add", "delete", "remove", "update", "patch", "refactor",
+        "implement", "generate", "rewrite",
+    ]
+    _has_action = any(k in msg for k in _action_kws)
+    _question_starters = (
+        "what", "why", "how", "when", "where", "who", "which",
+        "is ", "are ", "do ", "does ", "can ", "could ", "would ",
+        "should ", "will ", "was ", "were ", "has ", "have ",
+    )
+    _qa_phrases = ["tell me", "explain", "help me understand", "what can you"]
+    if not _has_action and (
+        msg.endswith("?") or
+        msg.startswith(_question_starters) or
+        any(k in msg for k in _qa_phrases)
+    ):
         return False
-    if len(message) > 300:
-        return True
+        
+    if len(message) < 50:
+        return False
+        
+    # Count positive signals
     signals = sum(1 for s in COMPLEX_SIGNALS if s in msg)
+    
+    # A long message alone isn't complex, it needs signals
+    if len(message) > 300:
+        return signals >= 2
+        
     return signals >= 3
 
 def parse_task_list(model_output):
