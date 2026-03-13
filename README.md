@@ -1,5 +1,13 @@
 # Codey
 
+**Important: Codey has evolved!**  
+
+The original simple CLI coding assistant has been rearchitected into **Codey-v2**: a full persistent, learning agent daemon.  
+This repo's README has been updated to reflect v1 features, but for the dedicated v2 developement (ongoing commits, issues, PRs):  
+→ https://github.com/Ishabdullah/Codey-v2
+
+If you're looking for the classic session-based version you found it. 🦾🦾🦾
+
 A local AI coding assistant for Termux, powered by Qwen2.5-Coder-7B running entirely on-device via llama.cpp. No cloud, no API keys, no data leaving your phone.
 
 ```
